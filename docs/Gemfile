@@ -1,0 +1,7 @@
+source "https://rubygems.org"
+
+gem "github-pages", group: :jekyll_plugins
+gem "just-the-docs"
+
+# This should not be hese, but added since it did not built without it
+gem "webrick"

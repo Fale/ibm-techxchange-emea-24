@@ -1,6 +1,13 @@
-# demo.sap-install
+# IBM TechXchange EMEA 2024 Lab
 
-This repository contains demos for the `community.sap_install`collection
-and how to use this from [AWX](https://github.com/ansible/awx) or [Red Hat Ansible Controller](https://www.ansible.com/products/controller?hsLang=en-us)
+This repository contains the material for the IBM TechXchange 2024 lab.
 
-[Here](https://sap-linuxlab.github.io/demo.sap_install) is the full description how to use these playbooks
+[Here](https://fale.github.io/ibm-techxchange-emea-24) is the full description of the lab
+
+## Development
+
+### Documentation
+
+To test the documentation locally, this can be used:
+
+    podman run -p 4000:4000 -v $(pwd):/site:Z bretfisher/jekyll-serve

@@ -1,0 +1,16 @@
+---
+- name: Configure Ansible Automation Controller
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: "Ensure organization {{ lab_org }} exists"
+      awx.awx.organization:
+        controller_host: "{{ controller_host }}"
+        controller_username: "{{ controller_username }}"
+        controller_password: "{{ controller_password }}"
+        name: "{{ lab_org }}"
+        state: present
+        validate_certs: "{{ controller_validate_certs }}"

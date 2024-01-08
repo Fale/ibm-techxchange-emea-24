@@ -1,0 +1,97 @@
+---
+- name: Configure Ansible Automation Controller
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure organization "{{ myorg }}" exists
+      awx.awx.organization:
+        name: "{{myorg}}"
+        description: "Red Hat SAP DEMO"
+        state: present
+        validate_certs: "{{ controller_validate_certs }}"
+
+    # - name: Ensure RHN Activation Key Credential
+    #  awx.awx.credential_type:
+    #    name: "RHN Activation Key"
+    #    description: "Used for RHN"
+    #    kind: cloud
+    #    inputs:
+    #      fields:
+    #        - id: activationkey
+    #          type: string
+    #          label: Activation Key
+    #          secret: true
+    #        - id: orgid
+    #          type: string
+    #          label: Organization ID
+    #          secret: true
+    #      required:
+    #        - activationkey
+    #        - orgid
+    #    injectors:
+    #      extra_vars:
+    #        reg_activation_key: ''
+    #        reg_organization_id: ''
+    #    state: present
+    #    validate_certs:  "{{ controller_validate_certs }}"
+
+    - name: Ensure Ansible Automation Hub credential exists
+      awx.awx.credential:
+        name: "{{ prefix }}Automation Hub Credential"
+        organization: "{{myorg}}"
+        credential_type: "Ansible Galaxy/Automation Hub API Token"
+        inputs:
+          url: https://console.redhat.com/api/automation-hub/content/published/
+          auth_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+          token: "{{ ah_token }}"
+        validate_certs: "{{ controller_validate_certs }}"
+      tags:
+        - update_credentials
+
+    - name: Ensure Galaxy Credentials are added to organization
+      awx.awx.organization:
+        name: "{{myorg}}"
+        galaxy_credentials:
+          - "Ansible Galaxy"
+          - "{{ prefix }}Automation Hub Credential"
+        state: present
+        validate_certs: "{{ controller_validate_certs }}"
+
+    - name: Ensure project for sap demo exists
+      awx.awx.project:
+        name: "{{ prefix }}SAP Demo Project"
+        organization: "{{myorg}}"
+        state: present
+        scm_type: git
+        scm_branch: azure
+        scm_url: https://github.com/sap-linuxlab/demo.sap_install.git
+        scm_clean: true
+        scm_delete_on_update: true
+        validate_certs: "{{ controller_validate_certs }}"
+
+    - name: Ensure demo projects are removed
+      awx.awx.project:
+        name: "{{ item }}"
+        state: absent
+        validate_certs: "{{ controller_validate_certs }}"
+      loop:
+        - "Azure Demos"
+        - "Demo Project"
+      tags:
+        - cleanup_demo_projects
+
+    - name: Cleanup demo job templates
+      awx.awx.job_template:
+        name: "{{ item }}"
+        state: absent
+        organization: "{{myorg}}"
+        validate_certs: "{{ controller_validate_certs }}"
+      loop:
+        - 'Azure web application deployment demo'
+        - 'Azure web application migration demo'
+        - 'Demo Job Template'
+      tags:
+        - cleanup_demo_templates

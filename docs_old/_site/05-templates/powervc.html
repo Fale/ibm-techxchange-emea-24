@@ -1,0 +1,256 @@
+<h1 id="template-creation-for-powervc">Template Creation for PowerVC</h1>
+
+<p>In this section you define the templates to run this demo.</p>
+
+<h2 id="test-your-configuration">Test your configuration</h2>
+
+<p>To check proper connection to your VCenter create the following template:</p>
+
+<ol>
+  <li>Go to <code class="highlighter-rouge">Resources</code> -&gt; <code class="highlighter-rouge">Templates</code></li>
+  <li>Click <code class="highlighter-rouge">Add</code> -&gt; <code class="highlighter-rouge">Add Job Template</code></li>
+  <li>Add the following parameters
+    <ul>
+      <li><strong>Name</strong>: tool - list diskimages</li>
+      <li><strong>Inventory</strong>: your demo inventory</li>
+      <li><strong>Project</strong>: your GitHub project</li>
+      <li><strong>Playbook</strong>: tools/powervc/power_list_diskimages.yml</li>
+      <li><strong>Credentials</strong>: OpenStack: PowerVC credentials</li>
+    </ul>
+  </li>
+  <li>Click <code class="highlighter-rouge">Save</code></li>
+  <li>Click <code class="highlighter-rouge">Launch</code></li>
+</ol>
+
+<p>If everything goes well you get a list of diskimages that are available in your environment.</p>
+
+<p>There are some more playbooks like this in the tools directory of this repository to get information on the PowerVC environment. You can use these playbooks to figure out some of the variables that need to be configured in the inventory.</p>
+
+<h2 id="set-up-the-provisioning-playbooks">Set up the provisioning playbooks</h2>
+
+<h3 id="step-1">Step 1</h3>
+<ol>
+  <li>Go to <code class="highlighter-rouge">Resources</code> -&gt; <code class="highlighter-rouge">Templates</code></li>
+  <li>Click <code class="highlighter-rouge">Add</code> -&gt; <code class="highlighter-rouge">Add Job Template</code></li>
+  <li>Add the following parameters
+    <ul>
+      <li><strong>Name</strong>: 01 - provision Servers</li>
+      <li><strong>Inventory</strong>: your demo inventory</li>
+      <li><strong>Project</strong>: your GitHub project</li>
+      <li><strong>Playbook</strong>: powervc/01-server-provisioning-power.yml</li>
+      <li><strong>Credentials</strong> OpenStack: PowerVC Credentials</li>
+    </ul>
+  </li>
+  <li>Click <code class="highlighter-rouge">Save</code></li>
+</ol>
+
+<h3 id="step-2a">Step 2a</h3>
+
+<ol>
+  <li>Click <code class="highlighter-rouge">Add</code> -&gt; <code class="highlighter-rouge">Add Job Template</code></li>
+  <li>Add the following parameters
+    <ul>
+      <li><strong>Name</strong>: 02 - basic-os-setup (part1)</li>
+      <li><strong>Inventory</strong>: your demo inventory</li>
+      <li><strong>Project</strong>: your GitHub project</li>
+      <li><strong>Playbook</strong>: powervc/02-basic-os-setup-subscription.yml</li>
+      <li><strong>Credentials</strong>
+        <ul>
+          <li><strong>OpenStack</strong>: PowerVC Credentials</li>
+          <li><strong>Cloud</strong>: RHN Registration Credentials</li>
+          <li><strong>SSH</strong>: Root Machine Credentials</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>Click <code class="highlighter-rouge">Save</code></li>
+</ol>
+
+<h3 id="step-2b">Step 2b</h3>
+
+<ol>
+  <li>Click <code class="highlighter-rouge">Add</code> -&gt; <code class="highlighter-rouge">Add Job Template</code></li>
+  <li>Add the following parameters
+    <ul>
+      <li><strong>Name</strong>: 02 - basic-os-setup (part2)</li>
+      <li><strong>Inventory</strong>: your demo inventory</li>
+      <li><strong>Project</strong>: your GitHub project</li>
+      <li><strong>Playbook</strong>: powervc/02-basic-os-setup-storage.yml</li>
+      <li><strong>Credentials</strong>
+        <ul>
+          <li><strong>OpenStack</strong>: PowerVC Credentials</li>
+          <li><strong>Cloud</strong>: RHN Registration Credentials</li>
+          <li><strong>SSH</strong>: Root Machine Credentials</li>
+        </ul>
+      </li>
+    </ul>
+  </li>
+  <li>Click <code class="highlighter-rouge">Save</code></li>
+</ol>
+
+<h3 id="step-3-and-4">Step 3 and 4</h3>
+
+<p>Repeat Step 2 with proper settings for the following playbooks in the powervc subdirectory:
+- 03-A-sap-hana-prepare.yml
+- 03-B-sap-hana-install.yml
+- 03-03-CD-sap-hana-cluster.yml (also needs PowerVC Credentials for unsupported Openstack fencing)
+- 04-A-sap-netweaver-prepare.yml
+- 04-B-S4-deployment.yml</p>
+
+<h3 id="combine-these-job-templates-in-a-workflow-template">Combine these job templates in a workflow template:</h3>
+
+<ol>
+  <li>Click <code class="highlighter-rouge">Add</code> -&gt; <code class="highlighter-rouge">Add Workflow Template</code></li>
+  <li>Add the following parameters
+    <ul>
+      <li><strong>Name</strong>: 00 - End-2-End S/4 HANA deployment</li>
+      <li><strong>Inventory</strong>: your demo inventory</li>
+      <li><strong>Project</strong>: your GitHub project</li>
+      <li><strong>Variables</strong>: (adopt the variables to your needs)</li>
+    </ul>
+  </li>
+</ol>
+
+<blockquote>
+  <p>This setup assumes a preconfigured DNS server with static names(see <a href="../00-prerequisites/power.md">Prerequisites</a>)</p>
+</blockquote>
+
+<p>```yaml
+	—
+	## Server Configuration (used in Step1 and Step 2)
+	## Hostgroup is taken from inventory os_availability_zones
+	server_def:
+		   - name: sapdemo21
+		     ip: 10.10.10.21
+		     flavor: medium
+		     group: hanas
+		     deploy_target: “Name of Hostgroup”
+		   - name: sapdemo22
+		     ip: 10.10.10.22
+		     flavor: medium
+		     group: hanas
+		     deploy_target: “Name of Hostgroup”
+		   - name: sapdemo23
+		     ip: 10.10.10.23
+		     flavor: medium
+		     group: s4hanas
+		     deploy_target: “Name of Hostgroup”</p>
+
+<div class="highlighter-rouge"><pre class="highlight"><code># sap_general_preconfigure (used in Step 3A and 4A)
+#-------------------------
+sap_domain: your.sap.domain.here
+sap_general_preconfigure_modify_etc_hosts: true
+sap_general_preconfigure_update: true
+sap_general_preconfigure_fail_if_reboot_required: false
+sap_general_preconfigure_reboot_ok: true
+
+# sap_hana_preconfigure(used in step 3A )
+#----------------------
+sap_hana_preconfigure_update: true
+sap_hana_preconfigure_fail_if_reboot_required: false
+sap_hana_preconfigure_reboot_ok: true
+
+# sap_netweaver_preconfigure (used in step 4A)
+#---------------------------
+# No definition needed
+
+# Path to SAP Software on NFS fileshare (used in step 3B und 4B)
+#----------------------------------
+# download new HANA version, or S4version -- just put it on the fileshare in a directory and change here
+# The directory name should be a part of the Product ID
+sap_hana_version: HANA2SPS06
+sap_swpm_product: S4HANA2021.FNDN
+
+# sap_hana_install (used in 3B and particular in 3CD and 4B)
+#------------------
+sap_hana_install_software_directory: "/"
+sap_hana_install_sapcar_filename: SAPCAR
+sap_hana_install_software_extract_directory: "/home/sapinst"
+sap_hana_install_master_password: "R3dh4t$123"
+sap_hana_sid: "RHE"
+sap_hana_instance_number: "00"
+
+# sap_install.sap_ha_* (4roles in step 03-CD)
+#---------------------
+### Cluster Definition
+sap_ha_install_pacemaker_cluster_name: cluster1
+sap_hana_hacluster_password: 'my_hacluster'
+
+sap_hana_cluster_nodes:
+  - node_name: rhd-hana1
+    node_ip: ""
+    node_role: primary
+    hana_site: DC01
+
+  - node_name: rhd-hana2
+    node_ip: ""
+    node_role: secondary
+    hana_site: DC02
+
+sap_ha_set_hana_vip1: 1.2.3.4 ## Change to Virtual IP of cluster (needs to be in hosts or DNS)
+sap_pacemaker_stonith_devices:
+  - name: "fence_for_openstack"
+    agent: "fence_openstack"
+    parameters: &gt;
+       &lt;to be defined&gt;
+
+# sap_swpm (used in step 4B)
+#----------
+# This currently does not work in all setups (see github issues)
+sap_swpm_update_etchosts: false
+
+# sap_swpm
+#----------
+# Product ID for New Installation
+sap_swpm_product_catalog_id: NW_ABAP_OneHost:.HDB.ABAP
+# Software
+sap_swpm_software_path: "/"
+sap_swpm_sapcar_path: ""
+sap_swpm_swpm_path: ""
+
+# NW Passwords
+sap_swpm_master_password: "R3dh4t$123"
+sap_swpm_ddic_000_password: ""
+# HDB Passwords
+sap_swpm_db_system_password: ""
+sap_swpm_db_systemdb_password: ""
+sap_swpm_db_schema_abap_password: ""
+sap_swpm_db_sidadm_password: ""
+# Default Value
+#sap_swpm_db_schema_abap: "SAPHANADB"
+# NW Instance Parameters
+sap_swpm_sid: S4H
+sap_swpm_pas_instance_nr: "01"
+sap_swpm_ascs_instance_nr: "02"
+sap_swpm_ascs_instance_hostname: ""
+sap_swpm_fqdn: ""
+# HDB Instance Parameters
+# For dual host installation, change the db_host to appropriate value
+sap_swpm_db_host: "hanavip"
+sap_swpm_db_sid: ""
+sap_swpm_db_instance_nr: ""    ``` 3. Click `Save`
+</code></pre>
+</div>
+
+<ol>
+  <li>Click <code class="highlighter-rouge">Visualizer</code> and create the following workflow:
+    <ol>
+      <li>on “Start” click <code class="highlighter-rouge">+</code>, select <code class="highlighter-rouge">On Success</code>, click <code class="highlighter-rouge">Next</code>, select job Template <code class="highlighter-rouge">01 provision servers</code> and click <code class="highlighter-rouge">Save</code></li>
+      <li>on <code class="highlighter-rouge">01 provisiom servers</code> and select Inventory sync <code class="highlighter-rouge">SAP Server</code> on success</li>
+      <li>on <code class="highlighter-rouge">SAP Server</code> select job template <code class="highlighter-rouge">02 basic OS Setup</code> on success</li>
+      <li>on <code class="highlighter-rouge">02 basic OS Setup</code> select job template <code class="highlighter-rouge">03-A Hana preparation</code> on success</li>
+      <li>on <code class="highlighter-rouge">02 basic OS Setup</code> select job template <code class="highlighter-rouge">04-A Netweaver preparation</code> on success</li>
+      <li>on <code class="highlighter-rouge">03-A Hana preparation</code> select job template <code class="highlighter-rouge">03-B HANA install</code> on success</li>
+      <li>on <code class="highlighter-rouge">03-B HANA install</code> select to template <code class="highlighter-rouge">03-CD- HANA HSR and Cluster</code> on success</li>
+      <li>on <code class="highlighter-rouge">03-CD- HANA HSR and Cluster</code> select <code class="highlighter-rouge">04 - SAP S/4HANA install</code> on success</li>
+      <li>on <code class="highlighter-rouge">04-A Netweaver Preparation</code>, click the chain symbol and connect it to the existing <code class="highlighter-rouge">04 - SAP S/4HANA install</code> tile</li>
+      <li>Click <code class="highlighter-rouge">Save</code></li>
+    </ol>
+  </li>
+</ol>
+
+<p>Your workflow should look like this:
+<img src="../assets/img/aap-e2e-workflow-visualizer.png" alt="Workflow Picture" /></p>
+
+<p>Appendix:
+https://access.redhat.com/articles/6964708</p>

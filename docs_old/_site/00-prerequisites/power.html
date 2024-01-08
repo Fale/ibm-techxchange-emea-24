@@ -1,0 +1,53 @@
+<h2 id="prerequisites-for-the-power-platform">Prerequisites for the Power Platform</h2>
+
+<p>To create this demo you need to have the following information available:</p>
+
+<ul>
+  <li>Admin Access to your Ansible Automation or AWX Controller</li>
+  <li>Name or IP Adress of PowerVC</li>
+  <li>Access Credentials for PowerVC (to create LPARs and Network)</li>
+  <li>A preconfigured OS Image that can be deployed using PowerVC</li>
+  <li>Network Ports of PowerVC need to be reachable by Ansible Execution Environment</li>
+</ul>
+
+<p><strong>Openstack Ports used by PowerVC</strong></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Port</th>
+      <th>OpenStack Component Name</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>5000</td>
+      <td>Keystone</td>
+    </tr>
+    <tr>
+      <td>8774</td>
+      <td>Nova</td>
+    </tr>
+    <tr>
+      <td>9696</td>
+      <td>Neutron</td>
+    </tr>
+    <tr>
+      <td>9000</td>
+      <td>Cinder</td>
+    </tr>
+    <tr>
+      <td>9292</td>
+      <td>Glance</td>
+    </tr>
+  </tbody>
+</table>
+
+<h2 id="dns">DNS</h2>
+<p>This demo assumes you have a DNS Server with static hostentries, where the IP addresses are predefined. It is recommended to use a prefix for the servers you use in this environment, e.g.</p>
+
+<p><code class="highlighter-rouge">
+10.10.10.21 sapdemo21.example.com sapdemo21
+10.10.10.22 sapdemo21.example.com sapdemo22
+...
+</code></p>

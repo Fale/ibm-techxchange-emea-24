@@ -1,0 +1,62 @@
+---
+- name: Configure Ansible Automation Controller
+  hosts: localhost
+  gather_facts: false
+  connection: local
+  vars_files:
+    - vars.yml
+  vars:
+    prefix: "RHDS "
+  vars_prompt:
+    - name: "controller_hostname"
+      prompt: "Controller URL"
+      private: false
+      default: "{{lookup('env', 'CONTROLLER_HOST')}}"
+    - name: "ah_token"
+      prompt: "Automation Hub token"
+      private: true
+      default: "{{ lookup('env', 'AH_TOKEN') }}"
+
+  tasks:
+    - name: Ensure organization "{{ lab_org }}" exists
+      awx.awx.organization:
+        name: "{{lab_org}}"
+        state: present
+        validate_certs: "{{ controller_validate_certs }}"
+
+    - name: Ensure RHN Activation Key Credential
+      awx.awx.credential_type:
+        name: "{{ lab_id }} RHN Activation Key"
+        kind: cloud
+        inputs:
+          fields:
+            - id: activationkey
+              type: string
+              label: Activation Key
+              secret: true
+            - id: orgid
+              type: string
+              label: Organization ID
+              secret: true
+          required:
+            - activationkey
+            - orgid
+        injectors:
+          extra_vars:
+            reg_activation_key: ''
+            reg_organization_id: ''
+        state: present
+        validate_certs: "{{ controller_validate_certs }}"
+
+    - name: Ensure Ansible Automation Hub credential exists
+      awx.awx.credential:
+        name: "{{ lab_id }} Automation Hub Credential"
+        organization: "{{lab_org}}"
+        credential_type: "Ansible Galaxy/Automation Hub API Token"
+        inputs:
+          url: https://console.redhat.com/api/automation-hub/content/published/
+          auth_url: https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token
+          token: "{{ ah_token }}"
+        validate_certs: "{{ controller_validate_certs }}"
+      tags:
+        - update_credentials
