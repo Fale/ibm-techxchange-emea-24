@@ -1,5 +1,6 @@
 ---
 title: Ansible/Power Lab
-theme: just-the-docs
+#theme: just-the-docs
+remote_theme: just-the-docs/just-the-docs
 baseurl: ""
 repository: fale/ibm-techxchange-emea-24
