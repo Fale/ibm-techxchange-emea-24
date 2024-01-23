@@ -1,0 +1,5 @@
+[web]
+node ansible_host={{ item.ip }} ansible_user={{ item.name }}
+
+[control]
+controller ansible_host=10.3.48.100 ansible_user={{ item.name }}

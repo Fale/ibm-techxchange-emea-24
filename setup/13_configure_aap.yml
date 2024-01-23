@@ -1,0 +1,113 @@
+---
+- name: Ensure AAP is properly configured
+  hosts: localhost
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure every student has an org
+      awx.awx.organization:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has a user
+      awx.awx.user:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        username: "{{ item.name }}"
+        password: "{{ item.password }}"
+        organization: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student is admin of their organization
+      awx.awx.role:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        user: "{{ item.name }}"
+        organization: "{{ item.name }}"
+        role: admin
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has a credential configured
+      awx.awx.credential:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }} Credential"
+        credential_type: Machine
+        organization: "{{ item.name }}"
+        inputs:
+          ssh_key_data: "{{ lookup('file', '/tmp/{{ item.name }}') }}"
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has an inventory
+      awx.awx.inventory:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }} Inventory"
+        organization: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has the controller configured
+      awx.awx.host:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: controller
+        inventory: "{{ item.name }} Inventory"
+        enabled: True
+        variables:
+          ansible_host: "{{ aap_controller }}"
+          ansible_user: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has their lab configured
+      awx.awx.host:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: node
+        inventory: "{{ item.name }} Inventory"
+        enabled: True
+        variables:
+          ansible_host: "{{ item.ip }}"
+          ansible_user: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has their control group configured
+      awx.awx.group:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: control
+        inventory: "{{ item.name }} Inventory"
+        hosts:
+          - controller
+        state: present
+        preserve_existing_hosts: True
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has their web group configured
+      awx.awx.group:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: web
+        inventory: "{{ item.name }} Inventory"
+        hosts:
+          - node
+        state: present
+        preserve_existing_hosts: True
+      loop: "{{ lab_seats }}"

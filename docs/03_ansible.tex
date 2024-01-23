@@ -1,0 +1,1077 @@
+\chapter{Ansible - advanced}
+\hypertarget{conditionals-handlers-and-loops}{%
+\section{Conditionals, Handlers and
+Loops}\label{conditionals-handlers-and-loops}}
+
+
+\hypertarget{objective}{%
+\subsection{Objective}\label{objective}}
+
+Three foundational Ansible features are:
+
+\begin{itemize}
+\tightlist
+\item
+  \href{https://docs.ansible.com/ansible/latest/user_guide/playbooks_conditionals.html}{Conditionals}
+\item
+  \href{https://docs.ansible.com/ansible/latest/user_guide/playbooks_intro.html\#handlers-running-operations-on-change}{Handlers}
+\item
+  \href{https://docs.ansible.com/ansible/latest/user_guide/playbooks_loops.html}{Loops}
+\end{itemize}
+
+\hypertarget{guide}{%
+\subsection{Guide}\label{guide}}
+
+\hypertarget{step-1---conditionals}{%
+\subsubsection{Step 1 - Conditionals}\label{step-1---conditionals}}
+
+Ansible can use conditionals to execute tasks or plays when certain
+conditions are met.
+
+To implement a conditional, the \texttt{when} statement must be used,
+followed by the condition to test. The condition is expressed using one
+of the available operators like e.g.~for comparison:
+
+\begin{longtable}[]{@{}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.0541}}
+  >{\raggedright\arraybackslash}p{(\columnwidth - 2\tabcolsep) * \real{0.9459}}@{}}
+\toprule\noalign{}
+\endhead
+\bottomrule\noalign{}
+\endlastfoot
+== & Compares two objects for equality. \\
+!= & Compares two objects for inequality. \\
+\textgreater{} & true if the left hand side is greater than the right
+hand side. \\
+\textgreater= & true if the left hand side is greater or equal to the
+right hand side. \\
+\textless{} & true if the left hand side is lower than the right hand
+side. \\
+\textless= & true if the left hand side is lower or equal to the right
+hand side. \\
+\end{longtable}
+
+For more on this, please refer to the documentation:
+\url{http://jinja.pocoo.org/docs/2.10/templates/}
+
+As an example you would like to install an FTP server, but only on hosts
+that are in the ``ftpserver'' inventory group.
+
+To do that, first edit the inventory to add another group, and place
+\texttt{node} in it. The section to add looks like this:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{[ftpserver]}
+\DataTypeTok{node}
+\end{Highlighting}
+\end{Shaded}
+
+Edit the inventory \texttt{\textasciitilde{}/hosts} to
+add those lines. When you are done, it will look similar to the
+following listing:
+
+\begin{quote}
+\textbf{Tip}
+
+The ansible\_host variable only needs to be specified once for a node.
+When adding a node to other groups, you do not need to specify the
+variable again.
+\end{quote}
+
+\textbf{Important} Do not copy/paste the example below. Just edit the
+file to add the above lines.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{[web]}
+\DataTypeTok{node ansible\_host}\OtherTok{=}\StringTok{xx.xx.xx.xx} \DataTypeTok{ansible\_user}\OtherTok{=}\StringTok{[USER]}
+
+\KeywordTok{[ftpserver]}
+\DataTypeTok{node}
+
+\KeywordTok{[control]}
+\DataTypeTok{controller ansible\_host}\OtherTok{=}\StringTok{xx.xx.xx.xx} \DataTypeTok{ansible\_user}\OtherTok{=}\StringTok{[USER]}
+\end{Highlighting}
+\end{Shaded}
+
+Next create the file \texttt{ftpserver.yml} on your control host in the
+\texttt{\textasciitilde{}/ansible-files/} directory:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Install vsftpd on ftpservers}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ all}
+\AttributeTok{  }\FunctionTok{become}\KeywordTok{:}\AttributeTok{ }\CharTok{True}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Install FTP server when host in ftpserver group}
+\AttributeTok{      }\FunctionTok{ansible.builtin.yum}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ vsftpd}
+\AttributeTok{        }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ latest}
+\AttributeTok{      }\FunctionTok{when}\KeywordTok{:}\AttributeTok{ inventory\_hostname in groups["ftpserver"]}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{quote}
+\textbf{Tip}
+
+By now you should know how to run Ansible Playbooks, we'll start to be
+less verbose in this guide. Go create and run it. :-)
+\end{quote}
+
+Run it and examine the output. The expected outcome: The task is skipped
+on the ansible host (your control host) because they
+are not in the ftpserver group in your inventory file.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{TASK}\NormalTok{ [Install FTP server when host in ftpserver group] }\PreprocessorTok{**************}
+\ExtensionTok{skipping:} \PreprocessorTok{[}\SpecialStringTok{controller}\PreprocessorTok{]}
+\ExtensionTok{changed:} \PreprocessorTok{[}\SpecialStringTok{node}\PreprocessorTok{]}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{step-2---handlers}{%
+\subsubsection{Step 2 - Handlers}\label{step-2---handlers}}
+
+Sometimes when a task does make a change to the system, an additional
+task or tasks may need to be run. For example, a change to a service's
+configuration file may then require that the service be restarted so
+that the changed configuration takes effect.
+
+Here Ansible's handlers come into play. Handlers can be seen as inactive
+tasks that only get triggered when explicitly invoked using the
+``notify'' statement. Read more about them in the
+\href{http://docs.ansible.com/ansible/latest/playbooks_intro.html\#handlers-running-operations-on-change}{Ansible
+Handlers} documentation.
+
+As a an example, let's write a playbook that:
+
+\begin{itemize}
+\tightlist
+\item
+  manages Apache's configuration file
+  \texttt{/etc/httpd/conf/httpd.conf} on all hosts in the \texttt{web}
+  group
+\item
+  restarts Apache when the file has changed
+\end{itemize}
+
+First we need the file Ansible will deploy, let's just take the one from
+node1. Remember to replace the IP address shown in the listing below
+with the IP address from your individual \texttt{node1}.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ scp 10.3.48.[100+PARTICIPANT\_ID]:/etc/httpd/conf/httpd.conf \\}
+\ExtensionTok{\textasciitilde{}/ansible{-}files/files/httpd.conf}
+\end{Highlighting}
+\end{Shaded}
+
+Next, create the Playbook \texttt{httpd\_conf.yml}. Make sure that you
+are in the directory \texttt{\textasciitilde{}/ansible-files}.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Manage httpd.conf}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ web}
+\AttributeTok{  }\FunctionTok{become}\KeywordTok{:}\AttributeTok{ }\CharTok{True}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Copy Apache configuration file}
+\AttributeTok{      }\FunctionTok{ansible.builtin.copy}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{src}\KeywordTok{:}\AttributeTok{ httpd.conf}
+\AttributeTok{        }\FunctionTok{dest}\KeywordTok{:}\AttributeTok{ /etc/httpd/conf/}
+\AttributeTok{        }\FunctionTok{mode}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}644\textquotesingle{}}
+\AttributeTok{      }\FunctionTok{notify}\KeywordTok{:}
+\AttributeTok{        }\KeywordTok{{-}}\AttributeTok{ Restart\_apache}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Open firewall port}
+\AttributeTok{      }\FunctionTok{ansible.posix.firewalld}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{port}\KeywordTok{:}\AttributeTok{ 8080/tcp}
+\AttributeTok{        }\FunctionTok{immediate}\KeywordTok{:}\CharTok{ True}
+\AttributeTok{        }\FunctionTok{permanent}\KeywordTok{:}\CharTok{ True}
+\AttributeTok{        }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ enabled}
+\AttributeTok{  }\FunctionTok{handlers}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Restart\_apache}
+\AttributeTok{      }\FunctionTok{ansible.builtin.service}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ httpd}
+\AttributeTok{        }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ restarted}
+\end{Highlighting}
+\end{Shaded}
+
+So what's new here?
+
+\begin{itemize}
+\tightlist
+\item
+  The ``notify'' section calls the handler only when the copy task
+  actually changes the file. That way the service is only restarted if
+  needed - and not each time the playbook is run.
+\item
+  The ``handlers'' section defines a task that is only run on
+  notification.
+\end{itemize}
+
+Run the playbook. We didn't change anything in the file yet so there
+should not be any \texttt{changed} lines in the output and of course the
+handler shouldn't have fired.
+
+\begin{itemize}
+\tightlist
+\item
+  Now change the \texttt{Listen\ 80} line in
+  \texttt{\textasciitilde{}/ansible-files/files/httpd.conf} to:
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\DataTypeTok{Listen 8080}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{itemize}
+\item
+  Run the playbook again. Now the Ansible's output should be a lot more
+  interesting:
+
+  \begin{itemize}
+  \tightlist
+  \item
+    httpd.conf should have been copied over
+  \item
+    The handler should have restarted Apache
+  \end{itemize}
+\end{itemize}
+
+Apache should now listen on port 8080. Easy enough to verify:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ curl http://10.3.48.[100+PARTICIPANT\_ID]}
+\ExtensionTok{curl:} \ExtensionTok{(7)} \ExtensionTok{Failed}\NormalTok{ to connect to 10.3.48.101 port 80: Connection refused}
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ curl http://10.3.48.[100+PARTICIPANT\_ID]:8080}
+\OperatorTok{\textless{}}\NormalTok{body}\OperatorTok{\textgreater{}}
+\OperatorTok{  \textless{}}\NormalTok{h1}\OperatorTok{\textgreater{}}\NormalTok{Apache }\ExtensionTok{is}\NormalTok{ running fine}\OperatorTok{\textless{}}\NormalTok{/h1}\OperatorTok{\textgreater{}}
+\OperatorTok{\textless{}}\NormalTok{/body}\OperatorTok{\textgreater{}}
+\end{Highlighting}
+\end{Shaded}
+
+Leave the setting for listen on port 8080. We'll use this in a later
+exercise.
+
+\hypertarget{step-3---simple-loops}{%
+\subsubsection{Step 3 - Simple Loops}\label{step-3---simple-loops}}
+
+Loops enable us to repeat the same task over and over again. For
+example, lets say you want to create multiple users. By using an Ansible
+loop, you can do that in a single task. Loops can also iterate over more
+than just basic lists. For example, if you have a list of users with
+their coresponding group, loop can iterate over them as well. Find out
+more about loops in the
+\href{https://docs.ansible.com/ansible/latest/user_guide/playbooks_loops.html}{Ansible
+Loops} documentation.
+
+To show the loops feature we will generate three new users on
+\texttt{node}. For that, create the file \texttt{loop\_users.yml} in
+\texttt{\textasciitilde{}/ansible-files} on your control node as your
+student user. We will use the \texttt{user} module to generate the user
+accounts.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Ensure users}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ node}
+\AttributeTok{  }\FunctionTok{become}\KeywordTok{:}\AttributeTok{ }\CharTok{True}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Ensure three users are present}
+\AttributeTok{      }\FunctionTok{ansible.builtin.user}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ }\StringTok{"\{\{ item \}\}"}
+\AttributeTok{        }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ present}
+\AttributeTok{      }\FunctionTok{loop}\KeywordTok{:}
+\AttributeTok{         }\KeywordTok{{-}}\AttributeTok{ dev\_user}
+\AttributeTok{         }\KeywordTok{{-}}\AttributeTok{ qa\_user}
+\AttributeTok{         }\KeywordTok{{-}}\AttributeTok{ prod\_user}
+\end{Highlighting}
+\end{Shaded}
+
+Understand the playbook and the output:
+
+\begin{itemize}
+\tightlist
+\item
+  The names are not provided to the user module directly. Instead, there
+  is only a variable called \texttt{\{\{\ item\ \}\}} for the parameter
+  \texttt{name}.
+\item
+  The \texttt{loop} keyword lists the actual user names. Those replace
+  the \texttt{\{\{\ item\ \}\}} during the actual execution of the
+  playbook.
+\item
+  During execution the task is only listed once, but there are three
+  changes listed underneath it.
+\end{itemize}
+
+\hypertarget{step-4---loops-over-hashes}{%
+\subsubsection{Step 4 - Loops over
+hashes}\label{step-4---loops-over-hashes}}
+
+As mentioned loops can also be over lists of hashes. Imagine that the
+users should be assigned to different additional groups:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{username}\KeywordTok{:}\AttributeTok{ dev\_user}
+\AttributeTok{  }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ ftp}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{username}\KeywordTok{:}\AttributeTok{ qa\_user}
+\AttributeTok{  }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ ftp}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{username}\KeywordTok{:}\AttributeTok{ prod\_user}
+\AttributeTok{  }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ apache}
+\end{Highlighting}
+\end{Shaded}
+
+The \texttt{user} module has the optional parameter \texttt{groups} to
+list additional users. To reference items in a hash, the
+\texttt{\{\{\ item\ \}\}} keyword needs to reference the subkey:
+\texttt{\{\{\ item.groups\ \}\}} for example.
+
+Let's rewrite the playbook to create the users with additional user
+rights:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Ensure users}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ node}
+\AttributeTok{  }\FunctionTok{become}\KeywordTok{:}\AttributeTok{ }\CharTok{True}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Ensure three users are present}
+\AttributeTok{      }\FunctionTok{ansible.builtin.user}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ }\StringTok{"\{\{ item.username \}\}"}
+\AttributeTok{        }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ present}
+\AttributeTok{        }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ }\StringTok{"\{\{ item.groups \}\}"}
+\AttributeTok{      }\FunctionTok{loop}\KeywordTok{:}
+\AttributeTok{        }\KeywordTok{{-}}\AttributeTok{ }\KeywordTok{\{}\AttributeTok{ }\FunctionTok{username}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}dev\_user\textquotesingle{}}\KeywordTok{,}\AttributeTok{ }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}ftp\textquotesingle{}}\AttributeTok{ }\KeywordTok{\}}
+\AttributeTok{        }\KeywordTok{{-}}\AttributeTok{ }\KeywordTok{\{}\AttributeTok{ }\FunctionTok{username}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}qa\_user\textquotesingle{}}\KeywordTok{,}\AttributeTok{ }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}ftp\textquotesingle{}}\AttributeTok{ }\KeywordTok{\}}
+\AttributeTok{        }\KeywordTok{{-}}\AttributeTok{ }\KeywordTok{\{}\AttributeTok{ }\FunctionTok{username}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}prod\_user\textquotesingle{}}\KeywordTok{,}\AttributeTok{ }\FunctionTok{groups}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}apache\textquotesingle{}}\AttributeTok{ }\KeywordTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+Check the output:
+
+\begin{itemize}
+\tightlist
+\item
+  Again the task is listed once, but three changes are listed. Each loop
+  with its content is shown.
+\end{itemize}
+
+Verify that the user \texttt{dev\_user} was indeed created on
+\texttt{node} using the following playbook:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Get user ID}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ node}
+\AttributeTok{  }\FunctionTok{vars}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{myuser}\KeywordTok{:}\AttributeTok{ }\StringTok{"dev\_user"}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Get \{\{ myuser \}\} info}
+\AttributeTok{      }\FunctionTok{ansible.builtin.getent}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{database}\KeywordTok{:}\AttributeTok{ passwd}
+\AttributeTok{        }\FunctionTok{key}\KeywordTok{:}\AttributeTok{ }\StringTok{"\{\{ myuser \}\}"}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{ansible.builtin.debug}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{msg}\KeywordTok{:}
+\AttributeTok{          }\KeywordTok{{-}}\AttributeTok{ }\StringTok{"\{\{ myuser \}\} uid: \{\{ getent\_passwd[myuser].1 \}\}"}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{$}\NormalTok{ ansible{-}navigator run user\_id.yml }\AttributeTok{{-}m}\NormalTok{ stdout}
+
+\ExtensionTok{PLAY}\NormalTok{ [Get user ID] }\PreprocessorTok{*************************************************************}
+
+\ExtensionTok{TASK}\NormalTok{ [Gathering Facts] }\PreprocessorTok{*********************************************************}
+\ExtensionTok{ok:} \PreprocessorTok{[}\SpecialStringTok{node}\PreprocessorTok{]}
+
+\ExtensionTok{TASK}\NormalTok{ [Get dev\_user info] }\PreprocessorTok{*******************************************************}
+\ExtensionTok{ok:} \PreprocessorTok{[}\SpecialStringTok{node}\PreprocessorTok{]}
+
+\ExtensionTok{TASK} \PreprocessorTok{[}\SpecialStringTok{debug}\PreprocessorTok{]} \PreprocessorTok{*******************************************************************}
+\ExtensionTok{ok:} \PreprocessorTok{[}\SpecialStringTok{node}\PreprocessorTok{]}\NormalTok{ =}\OperatorTok{\textgreater{}}\NormalTok{ \{}
+    \StringTok{"msg"}\ExtensionTok{:}\NormalTok{ [}
+        \StringTok{"dev\_user uid: 1002"}
+    \ExtensionTok{]}
+\ErrorTok{\}}
+
+\ExtensionTok{PLAY}\NormalTok{ RECAP }\PreprocessorTok{*********************************************************************}
+\ExtensionTok{node}\NormalTok{: ok=3  changed=0  unreachable=0  failed=0  skipped=0  rescued=0  ignored=0}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{templates}{%
+\section{Templates}\label{templates}}
+
+\hypertarget{objective}{%
+\subsection{Objective}\label{objective}}
+
+This exercise will cover Jinja2 templating. Ansible uses Jinja2
+templating to modify files before they are distributed to managed hosts.
+Jinja2 is one of the most used template engines for Python
+(\url{http://jinja.pocoo.org/}).
+
+\hypertarget{guide}{%
+\subsection{Guide}\label{guide}}
+
+\hypertarget{step-1---using-templates-in-playbooks}{%
+\subsubsection{Step 1 - Using Templates in
+Playbooks}\label{step-1---using-templates-in-playbooks}}
+
+When a template for a file has been created, it can be deployed to the
+managed hosts using the \texttt{template} module, which supports the
+transfer of a local file from the control node to the managed hosts.
+
+As an example of using templates you will change the motd file to
+contain host-specific data.
+
+First create the directory \texttt{templates} to hold template resources
+in \texttt{\textasciitilde{}/ansible-files/}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ mkdir templates}
+\end{Highlighting}
+\end{Shaded}
+
+Then in the \texttt{\textasciitilde{}/ansible-files/templates/}
+directory create the template file \texttt{motd-facts.j2}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Welcome to \{\{ ansible\_hostname \}\}.}
+\NormalTok{\{\{ ansible\_distribution \}\} \{\{ ansible\_distribution\_version\}\}}
+\NormalTok{deployed on \{\{ ansible\_architecture \}\} architecture.}
+\end{Highlighting}
+\end{Shaded}
+
+The template file contains the basic text that will later be copied
+over. It also contains variables which will be replaced on the target
+machines individually.
+
+Next we need a playbook to use this template. In the
+\texttt{\textasciitilde{}/ansible-files/} directory create the Playbook
+\texttt{motd-facts.yml}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Fill motd file with host data}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ node}
+\AttributeTok{  }\FunctionTok{become}\KeywordTok{:}\AttributeTok{ }\CharTok{True}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{ansible.builtin.template}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{src}\KeywordTok{:}\AttributeTok{ motd{-}facts.j2}
+\AttributeTok{        }\FunctionTok{dest}\KeywordTok{:}\AttributeTok{ /etc/motd}
+\AttributeTok{        }\FunctionTok{owner}\KeywordTok{:}\AttributeTok{ root}
+\AttributeTok{        }\FunctionTok{group}\KeywordTok{:}\AttributeTok{ root}
+\AttributeTok{        }\FunctionTok{mode}\KeywordTok{:}\AttributeTok{ }\DecValTok{0644}
+\end{Highlighting}
+\end{Shaded}
+
+You have done this a couple of times by now:
+
+\begin{itemize}
+\tightlist
+\item
+  Understand what the Playbook does.
+\item
+  Execute the Playbook \texttt{motd-facts.yml}.
+\item
+  Login to node via SSH and check the message of the day content.
+\item
+  Log out of node.
+\end{itemize}
+
+You should see how Ansible replaces the variables with the facts it
+discovered from the system.
+
+\hypertarget{step-2---challenge-lab}{%
+\subsubsection{Step 2 - Challenge Lab}\label{step-2---challenge-lab}}
+
+Add a line to the template to list the current kernel of the managed
+node.
+
+\begin{itemize}
+\tightlist
+\item
+  Find a fact that contains the kernel version using the commands you
+  learned in the ``Ansible Facts'' chapter.
+\end{itemize}
+
+\begin{quote}
+\textbf{Tip}
+
+filter for kernel
+\end{quote}
+
+\begin{quote}
+Run the newly created playbook to find the fact name.
+\end{quote}
+
+\begin{itemize}
+\item
+  Change the template to use the fact you found.
+\item
+  Run the motd playbook again.
+\item
+  Check motd by logging in to node
+\end{itemize}
+
+\begin{quote}
+\textbf{Warning}
+
+\textbf{Solution below!}
+\end{quote}
+
+\begin{itemize}
+\tightlist
+\item
+  Find the fact:
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Capture Kernel Version}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ node}
+\AttributeTok{  }\FunctionTok{tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ Collect only kernel facts}
+\AttributeTok{      }\FunctionTok{ansible.builtin.setup}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{filter}\KeywordTok{:}
+\AttributeTok{          }\KeywordTok{{-}}\AttributeTok{ }\StringTok{\textquotesingle{}*kernel\textquotesingle{}}
+\AttributeTok{      }\FunctionTok{register}\KeywordTok{:}\AttributeTok{ setup}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{ansible.builtin.debug}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{var}\KeywordTok{:}\AttributeTok{ setup}
+\end{Highlighting}
+\end{Shaded}
+
+With the wildcard in place, the output shows:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+
+\ExtensionTok{TASK} \PreprocessorTok{[}\SpecialStringTok{debug}\PreprocessorTok{]} \PreprocessorTok{*******************************************************************}
+\ExtensionTok{ok:} \PreprocessorTok{[}\SpecialStringTok{node1}\PreprocessorTok{]}\NormalTok{ =}\OperatorTok{\textgreater{}}\NormalTok{ \{}
+    \StringTok{"setup"}\ExtensionTok{:}\NormalTok{ \{}
+        \StringTok{"ansible\_facts"}\ExtensionTok{:}\NormalTok{ \{}
+            \StringTok{"ansible\_kernel"}\ExtensionTok{:} \StringTok{"4.18.0{-}513.11.1.el8\_9.ppc64le"}
+        \ErrorTok{\}}\ExtensionTok{,}
+        \StringTok{"changed"}\ExtensionTok{:}\NormalTok{ false,}
+        \StringTok{"failed"}\ExtensionTok{:}\NormalTok{ false}
+    \ErrorTok{\}}
+\ErrorTok{\}}
+\end{Highlighting}
+\end{Shaded}
+
+With this we can conclude the variable we are looking for is labeled
+\texttt{ansible\_kernel}.
+
+Then we can update the motd-facts.j2 template to include
+\texttt{ansible\_kernel} as part of its message.
+
+\begin{itemize}
+\tightlist
+\item
+  Modify the template \texttt{motd-facts.j2}:
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{Welcome to \{\{ ansible\_hostname \}\}.}
+\NormalTok{\{\{ ansible\_distribution \}\} \{\{ ansible\_distribution\_version\}\}}
+\NormalTok{deployed on \{\{ ansible\_architecture \}\} architecture}
+\NormalTok{running kernel \{\{ ansible\_kernel \}\}.}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{itemize}
+\tightlist
+\item
+  Run the playbook.
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ \textasciitilde{}]$ ansible{-}navigator run motd{-}facts.yml }\AttributeTok{{-}m}\NormalTok{ stdout}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{itemize}
+\tightlist
+\item
+  Verify the new message via SSH login to \texttt{node}.
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ \textasciitilde{}]$ ssh 10.3.48.[100+PARTICIPANT\_ID]}
+\ExtensionTok{Welcome}\NormalTok{ to node.}
+\ExtensionTok{RedHat}\NormalTok{ 8.9}
+\ExtensionTok{deployed}\NormalTok{ on ppc64le architecture}
+\ExtensionTok{running}\NormalTok{ kernel 4.18.0{-}513.11.1.el8\_9.ppc64le.}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{roles---making-your-playbooks-reusable}{%
+\section{Roles - Making your playbooks
+reusable}\label{roles---making-your-playbooks-reusable}}
+
+\hypertarget{objective}{%
+\subsection{Objective}\label{objective}}
+
+While it is possible to write a playbook in one file as we've done
+throughout this workshop, eventually you'll want to reuse files and
+start to organize things.
+
+Ansible Roles are the way we do this. When you create a role, you
+deconstruct your playbook into parts and those parts sit in a directory
+structure. This is explained in more details in the
+\href{https://docs.ansible.com/ansible/latest/user_guide/playbooks_best_practices.html}{Tips
+and tricks} and the
+\href{https://docs.ansible.com/ansible/latest/user_guide/sample_setup.html}{Sample
+Ansible setup}.
+
+This exercise will cover:
+
+\begin{itemize}
+\tightlist
+\item
+  the folder structure of an Ansible Role
+\item
+  how to build an Ansible Role
+\item
+  creating an Ansible Play to use and execute a role
+\item
+  using Ansible to create a Apache VirtualHost on node
+\end{itemize}
+
+\hypertarget{guide}{%
+\subsection{Guide}\label{guide}}
+
+\hypertarget{step-1---understanding-the-ansible-role-structure}{%
+\subsubsection{Step 1 - Understanding the Ansible Role
+Structure}\label{step-1---understanding-the-ansible-role-structure}}
+
+Roles follow a defined directory structure; a role is named by the top
+level directory. Some of the subdirectories contain YAML files, named
+\texttt{main.yml}. The files and templates subdirectories can contain
+objects referenced by the YAML files.
+
+An example project structure could look like this, the name of the role
+would be ``apache'':
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{apache/}
+\NormalTok{├── defaults}
+\NormalTok{│   └── main.yml}
+\NormalTok{├── files}
+\NormalTok{├── handlers}
+\NormalTok{│   └── main.yml}
+\NormalTok{├── meta}
+\NormalTok{│   └── main.yml}
+\NormalTok{├── README.md}
+\NormalTok{├── tasks}
+\NormalTok{│   └── main.yml}
+\NormalTok{├── templates}
+\NormalTok{├── tests}
+\NormalTok{│   ├── inventory}
+\NormalTok{│   └── test.yml}
+\NormalTok{└── vars}
+\NormalTok{    └── main.yml}
+\end{Highlighting}
+\end{Shaded}
+
+The various \texttt{main.yml} files contain content depending on their
+location in the directory structure shown above. For instance,
+\texttt{vars/main.yml} references variables, \texttt{handlers/main.yaml}
+describes handlers, and so on. Note that in contrast to playbooks, the
+\texttt{main.yml} files only contain the specific content and not
+additional playbook information like hosts, \texttt{become} or other
+keywords.
+
+\begin{quote}
+\textbf{Tip}
+
+There are actually two directories for variables: \texttt{vars} and
+\texttt{default}. Default variables, \texttt{defaults/main.yml}, have
+the lowest precedence and usually contain default values set by the role
+authors and are often used when it is intended that their values will be
+overridden. Variables set in \texttt{vars/main.yml} are for variables
+not intended to be modified.
+\end{quote}
+
+Using roles in a Playbook is straight forward:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ launch roles}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ web}
+\AttributeTok{  }\FunctionTok{roles}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ role1}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ role2}
+\end{Highlighting}
+\end{Shaded}
+
+For each role, the tasks, handlers and variables of that role will be
+included in the Playbook, in that order. Any copy, script, template, or
+include tasks in the role can reference the relevant files, templates,
+or tasks \emph{without absolute or relative path names}. Ansible will
+look for them in the role's files, templates, or tasks respectively,
+based on their use.
+
+\hypertarget{step-2---create-a-basic-role-directory-structure}{%
+\subsubsection{Step 2 - Create a Basic Role Directory
+Structure}\label{step-2---create-a-basic-role-directory-structure}}
+
+Ansible looks for roles in a subdirectory called \texttt{roles} in the
+project directory. This can be overridden in the Ansible configuration.
+Each role has its own directory. To ease creation of a new role the tool
+\texttt{ansible-galaxy} can be used.
+
+\begin{quote}
+\textbf{Tip}
+
+Ansible Galaxy is your hub for finding, reusing and sharing the best
+Ansible content. \texttt{ansible-galaxy} helps to interact with Ansible
+Galaxy. For now we'll just using it as a helper to build the directory
+structure.
+\end{quote}
+
+Okay, lets start to build a role. We'll build a role that installs and
+configures Apache to serve a virtual host. Run these commands in your
+\texttt{\textasciitilde{}/ansible-files} directory:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ mkdir roles}
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ ansible{-}galaxy init }\AttributeTok{{-}{-}offline}\NormalTok{ roles/apache\_vhost}
+\end{Highlighting}
+\end{Shaded}
+
+Have a look at the role directories and their content:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ tree roles}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{roles/}
+\NormalTok{└── apache\_vhost}
+\NormalTok{    ├── defaults}
+\NormalTok{    │   └── main.yml}
+\NormalTok{    ├── files}
+\NormalTok{    ├── handlers}
+\NormalTok{    │   └── main.yml}
+\NormalTok{    ├── meta}
+\NormalTok{    │   └── main.yml}
+\NormalTok{    ├── README.md}
+\NormalTok{    ├── tasks}
+\NormalTok{    │   └── main.yml}
+\NormalTok{    ├── templates}
+\NormalTok{    ├── tests}
+\NormalTok{    │   ├── inventory}
+\NormalTok{    │   └── test.yml}
+\NormalTok{    └── vars}
+\NormalTok{        └── main.yml}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{step-3---create-the-tasks-file}{%
+\subsubsection{Step 3 - Create the Tasks
+File}\label{step-3---create-the-tasks-file}}
+
+The \texttt{main.yml} file in the tasks subdirectory of the role should
+do the following:
+
+\begin{itemize}
+\tightlist
+\item
+  Make sure httpd is installed
+\item
+  Make sure httpd is started and enabled
+\item
+  Put HTML content into the Apache document root
+\item
+  Install the template provided to configure the vhost
+\end{itemize}
+
+\begin{quote}
+\textbf{WARNING}
+
+\textbf{The \texttt{main.yml} (and other files possibly included by
+main.yml) can only contain tasks, \emph{not} complete playbooks!}
+\end{quote}
+
+Edit the \texttt{roles/apache\_vhost/tasks/main.yml} file:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ install httpd}
+\AttributeTok{  }\FunctionTok{ansible.builtin.yum}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ httpd}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ latest}
+
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ start and enable httpd service}
+\AttributeTok{  }\FunctionTok{ansible.builtin.service}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ httpd}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ started}
+\AttributeTok{    }\FunctionTok{enabled}\KeywordTok{:}\AttributeTok{ }\CharTok{true}
+\end{Highlighting}
+\end{Shaded}
+
+Note that here just tasks were added. The details of a playbook are not
+present.
+
+The tasks added so far do:
+
+\begin{itemize}
+\tightlist
+\item
+  Install the httpd package using the yum module
+\item
+  Use the service module to enable and start httpd
+\end{itemize}
+
+Next we add two more tasks to ensure a vhost directory structure and
+copy html content:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ ensure vhost directory is present}
+\AttributeTok{  }\FunctionTok{ansible.builtin.file}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{path}\KeywordTok{:}\AttributeTok{ }\StringTok{"/var/www/vhosts/\{\{ ansible\_hostname \}\}"}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ directory}
+
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ deliver html content}
+\AttributeTok{  }\FunctionTok{ansible.builtin.copy}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{src}\KeywordTok{:}\AttributeTok{ web.html}
+\AttributeTok{    }\FunctionTok{dest}\KeywordTok{:}\AttributeTok{ }\StringTok{"/var/www/vhosts/\{\{ ansible\_hostname \}\}/index.html"}
+\end{Highlighting}
+\end{Shaded}
+
+Note that the vhost directory is created/ensured using the \texttt{file}
+module.
+
+The last task we add uses the template module to create the vhost
+configuration file from a j2-template:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ template vhost file}
+\AttributeTok{  }\FunctionTok{ansible.builtin.template}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{src}\KeywordTok{:}\AttributeTok{ vhost.conf.j2}
+\AttributeTok{    }\FunctionTok{dest}\KeywordTok{:}\AttributeTok{ /etc/httpd/conf.d/vhost.conf}
+\AttributeTok{    }\FunctionTok{owner}\KeywordTok{:}\AttributeTok{ root}
+\AttributeTok{    }\FunctionTok{group}\KeywordTok{:}\AttributeTok{ root}
+\AttributeTok{    }\FunctionTok{mode}\KeywordTok{:}\AttributeTok{ }\DecValTok{0644}
+\AttributeTok{  }\FunctionTok{notify}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ restart\_httpd}
+\end{Highlighting}
+\end{Shaded}
+
+Note it is using a handler to restart httpd after an configuration
+update.
+
+The full \texttt{tasks/main.yml} file is:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ install httpd}
+\AttributeTok{  }\FunctionTok{ansible.builtin.yum}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ httpd}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ latest}
+
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ start and enable httpd service}
+\AttributeTok{  }\FunctionTok{ansible.builtin.service}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ httpd}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ started}
+\AttributeTok{    }\FunctionTok{enabled}\KeywordTok{:}\AttributeTok{ }\CharTok{true}
+
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ ensure vhost directory is present}
+\AttributeTok{  }\FunctionTok{ansible.builtin.file}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{path}\KeywordTok{:}\AttributeTok{ }\StringTok{"/var/www/vhosts/\{\{ ansible\_hostname \}\}"}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ directory}
+
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ deliver html content}
+\AttributeTok{  }\FunctionTok{ansible.builtin.copy}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{src}\KeywordTok{:}\AttributeTok{ web.html}
+\AttributeTok{    }\FunctionTok{dest}\KeywordTok{:}\AttributeTok{ }\StringTok{"/var/www/vhosts/\{\{ ansible\_hostname \}\}/index.html"}
+
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ template vhost file}
+\AttributeTok{  }\FunctionTok{ansible.builtin.template}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{src}\KeywordTok{:}\AttributeTok{ vhost.conf.j2}
+\AttributeTok{    }\FunctionTok{dest}\KeywordTok{:}\AttributeTok{ /etc/httpd/conf.d/vhost.conf}
+\AttributeTok{    }\FunctionTok{owner}\KeywordTok{:}\AttributeTok{ root}
+\AttributeTok{    }\FunctionTok{group}\KeywordTok{:}\AttributeTok{ root}
+\AttributeTok{    }\FunctionTok{mode}\KeywordTok{:}\AttributeTok{ }\DecValTok{0644}
+\AttributeTok{  }\FunctionTok{notify}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ restart\_httpd}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{step-4---create-the-handler}{%
+\subsubsection{Step 4 - Create the
+handler}\label{step-4---create-the-handler}}
+
+Create the handler in the file
+\texttt{roles/apache\_vhost/handlers/main.yml} to restart httpd when
+notified by the template task:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\CommentTok{\# handlers file for roles/apache\_vhost}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ restart\_httpd}
+\AttributeTok{  }\FunctionTok{ansible.builtin.service}\KeywordTok{:}
+\AttributeTok{    }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ httpd}
+\AttributeTok{    }\FunctionTok{state}\KeywordTok{:}\AttributeTok{ restarted}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{step-5---create-the-web.html-and-vhost-configuration-file-template}{%
+\subsubsection{Step 5 - Create the web.html and vhost configuration file
+template}\label{step-5---create-the-web.html-and-vhost-configuration-file-template}}
+
+Create the HTML content that will be served by the webserver.
+
+\begin{itemize}
+\tightlist
+\item
+  Create an web.html file in the ``src'' directory of the role,
+  \texttt{files}:
+\end{itemize}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#\textgreater{} echo \textquotesingle{}simple vhost index\textquotesingle{} \textgreater{} \textasciitilde{}/ansible{-}files/roles/apache\_vhost/files/web.html}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{itemize}
+\tightlist
+\item
+  Create the \texttt{vhost.conf.j2} template file in the role's
+  \texttt{templates} subdirectory.
+\end{itemize}
+
+The contents of the \texttt{vhost.conf.j2} template file are found
+below.
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{\# \{\{ ansible\_managed \}\}}
+
+\NormalTok{\textless{}VirtualHost *:8080\textgreater{}}
+\NormalTok{    ServerAdmin webmaster@\{\{ ansible\_fqdn \}\}}
+\NormalTok{    ServerName \{\{ ansible\_fqdn \}\}}
+\NormalTok{    ErrorLog logs/\{\{ ansible\_hostname \}\}{-}error.log}
+\NormalTok{    CustomLog logs/\{\{ ansible\_hostname \}\}{-}common.log common}
+\NormalTok{    DocumentRoot /var/www/vhosts/\{\{ ansible\_hostname \}\}/}
+
+\NormalTok{    \textless{}Directory /var/www/vhosts/\{\{ ansible\_hostname \}\}/\textgreater{}}
+\NormalTok{  Options +Indexes +FollowSymlinks +Includes}
+\NormalTok{  Order allow,deny}
+\NormalTok{  Allow from all}
+\NormalTok{    \textless{}/Directory\textgreater{}}
+\NormalTok{\textless{}/VirtualHost\textgreater{}}
+\end{Highlighting}
+\end{Shaded}
+
+\hypertarget{step-6---test-the-role}{%
+\subsubsection{Step 6 - Test the role}\label{step-6---test-the-role}}
+
+You are ready to test the role against \texttt{node}. But since a role
+cannot be assigned to a node directly, first create a playbook which
+connects the role and the host. Create the file
+\texttt{test\_apache\_role.yml} in the directory
+\texttt{\textasciitilde{}/ansible-files}:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\PreprocessorTok{{-}{-}{-}}
+\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{name}\KeywordTok{:}\AttributeTok{ use apache\_vhost role playbook}
+\AttributeTok{  }\FunctionTok{hosts}\KeywordTok{:}\AttributeTok{ node}
+\AttributeTok{  }\FunctionTok{become}\KeywordTok{:}\AttributeTok{ }\CharTok{True}
+\AttributeTok{  }\FunctionTok{pre\_tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{ansible.builtin.debug}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{msg}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}Beginning web server configuration.\textquotesingle{}}
+\AttributeTok{  }\FunctionTok{roles}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ apache\_vhost}
+\AttributeTok{  }\FunctionTok{post\_tasks}\KeywordTok{:}
+\AttributeTok{    }\KeywordTok{{-}}\AttributeTok{ }\FunctionTok{ansible.builtin.debug}\KeywordTok{:}
+\AttributeTok{        }\FunctionTok{msg}\KeywordTok{:}\AttributeTok{ }\StringTok{\textquotesingle{}Web server has been configured.\textquotesingle{}}
+\end{Highlighting}
+\end{Shaded}
+
+Note the \texttt{pre\_tasks} and \texttt{post\_tasks} keywords.
+Normally, the tasks of roles execute before the tasks of a playbook. To
+control order of execution \texttt{pre\_tasks} are performed before any
+roles are applied. The \texttt{post\_tasks} are performed after all the
+roles have completed. Here we just use them to better highlight when the
+actual role is executed.
+
+Now you are ready to run your playbook:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ ansible{-}navigator run test\_apache\_role.yml}
+\end{Highlighting}
+\end{Shaded}
+
+Run a curl command against \texttt{node} to confirm that the role
+worked:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{[student@controller}\NormalTok{ ansible{-}files]$ curl }\AttributeTok{{-}s}\NormalTok{ http://10.3.48.[100+PARTICIPANT\_ID]:8080}
+\ExtensionTok{simple}\NormalTok{ vhost index}
+\end{Highlighting}
+\end{Shaded}
+
+Congratulations! You have successfully completed this exercise!
+
+\hypertarget{troubleshooting-problems}{%
+\subsection{Troubleshooting problems}\label{troubleshooting-problems}}
+
+Did the final curl work? You can see what ports the web server is
+running by using the ss command:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{\#\textgreater{} sudo ss {-}tulpn | grep httpd}
+\end{Highlighting}
+\end{Shaded}
+
+There should be a line like this:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\ExtensionTok{tcp}\NormalTok{   LISTEN 0      511                }\PreprocessorTok{*}\NormalTok{:8080               }\PreprocessorTok{*}\NormalTok{:}\PreprocessorTok{*}\NormalTok{    users:}\ErrorTok{(}\KeywordTok{(}\StringTok{"httpd"}\ExtensionTok{,pid=182567,fd=4}\KeywordTok{)}\ExtensionTok{,}\ErrorTok{(}\StringTok{"httpd"}\ExtensionTok{,pid=182566,fd=4}\KeywordTok{)}\ExtensionTok{,}\ErrorTok{(}\StringTok{"httpd"}\ExtensionTok{,pid=182565,fd=4}\KeywordTok{)}\ExtensionTok{,}\ErrorTok{(}\StringTok{"httpd"}\ExtensionTok{,pid=182552,fd=4}\KeywordTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+Pay close attention to the fifth column of the above output. It should
+be \texttt{*:8080}. If it is \texttt{*:80} instead or if it is not
+working, then make sure that the \texttt{/etc/httpd/conf/httpd.conf}
+file has \texttt{Listen\ 8080} in it. This should have been changed by
+\href{../1.5-handlers}{Exercise 1.5}

@@ -1,0 +1,71 @@
+---
+- name: Ensure the control machine is properly configured for each student
+  hosts: controller
+  remote_user: root
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure all labs machines are known as naked hosts
+      ansible.builtin.lineinfile:
+        dest: /etc/hosts
+        regexp: '.* {{ item.name }}$'
+        line: "{{ item.ip }} {{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure the user exists and has an SSH key
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        password: "{{ item.password | password_hash('sha512') }}"
+        generate_ssh_key: True
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Get users public SSH key
+      ansible.builtin.fetch:
+        src: "/home/{{ item.name }}/.ssh/id_rsa.pub"
+        dest: "/tmp/{{ item.name }}.pub"
+        flat: True
+      loop: "{{ lab_seats }}"
+    - name: Get users private SSH key
+      ansible.builtin.fetch:
+        src: "/home/{{ item.name }}/.ssh/id_rsa"
+        dest: "/tmp/{{ item.name }}"
+        flat: True
+      loop: "{{ lab_seats }}"
+    - name: Ensure every user can ssh to self
+      ansible.posix.authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ lookup('file', '/tmp/{{ item.name }}.pub') }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Check if podman is already configured
+      containers.podman.podman_login_info:
+        registry: registry.redhat.io
+      register: podman_status
+      become: True
+      become_user: "{{ item.name }}"
+      loop: "{{ lab_seats }}"
+    - name: Ensure every user has podman properly configured
+      containers.podman.podman_login:
+        username: "{{ rhn_user }}"
+        password: "{{ rhn_password }}"
+        registry: registry.redhat.io
+      become: True
+      become_user: "{{ item.item.name }}"
+      when: not item.login.logged_in
+      loop: "{{ podman_status.results }}"
+    - name: Ensure every user has the ansible-navigator.yml config file
+      ansible.builtin.copy:
+        src: ansible-navigator.yml
+        dest: "/home/{{ item.name }}/.ansible-navigator.yml"
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0644"
+      loop: "{{ lab_seats }}"
+    - name: Ensure every user has the inventory file
+      ansible.builtin.template:
+        src: hosts
+        dest: "/home/{{ item.name }}/hosts"
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0644"
+      loop: "{{ lab_seats }}"

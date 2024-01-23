@@ -1,0 +1,27 @@
+---
+- name: Server provisioning
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure pythonpreqs are met
+      ansible.builtin.pip:
+        name:
+          - ansible-lint
+          - dnspython
+          - jmespath
+          - openstacksdk>=1.0
+          - requests
+            #    - name: Create SSH Keypairs to inject into hosts
+            #      include_role:
+            #        name: powervc_keypair_create
+    - name: Create LPARs
+      include_role:
+        name: powervc_vm_create
+      vars:
+        vm_create_name: "{{ lab_id }}_{{ item.name }}"
+        vm_create_ip: "{{ item.ip }}"
+        vm_create_flavor: medium
+        vm_create_binding_vnic_type: "{{ os_network_vnic_type | default(omit) }}"
+      loop: "{{ lab_seats }}"

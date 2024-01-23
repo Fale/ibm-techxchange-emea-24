@@ -1,0 +1,22 @@
+---
+- name: Clean control machine
+  hosts: controller
+  remote_user: root
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure the user has no processes running
+      ansible.builtin.shell:
+        cmd: "pgrep -U {{ item.name }} | xargs kill -9"
+      failed_when: false
+      loop: "{{ lab_seats }}"
+    - name: Ensure the user is not present
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ lab_seats }}"
+    - name: Ensure the user folder is not present
+      ansible.builtin.file:
+        path: "/home/{{ item.name }}"
+        state: absent
+      loop: "{{ lab_seats }}"

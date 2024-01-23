@@ -25,3 +25,220 @@
         vm_create_flavor: medium
         vm_create_binding_vnic_type: "{{ os_network_vnic_type | default(omit) }}"
       loop: "{{ lab_seats }}"
+
+- name: Ensure the control machine is properly configured for each student
+  hosts: controller
+  remote_user: root
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure all labs machines are known as naked hosts
+      ansible.builtin.lineinfile:
+        dest: /etc/hosts
+        regexp: '.* {{ item.name }}$'
+        line: "{{ item.ip }} {{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure the user exists and has an SSH key
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        password: "{{ item.password | password_hash('sha512') }}"
+        generate_ssh_key: True
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Get users public SSH key
+      ansible.builtin.fetch:
+        src: "/home/{{ item.name }}/.ssh/id_rsa.pub"
+        dest: "/tmp/{{ item.name }}.pub"
+        flat: True
+      loop: "{{ lab_seats }}"
+    - name: Get users private SSH key
+      ansible.builtin.fetch:
+        src: "/home/{{ item.name }}/.ssh/id_rsa"
+        dest: "/tmp/{{ item.name }}"
+        flat: True
+      loop: "{{ lab_seats }}"
+    - name: Ensure every user can ssh to self
+      ansible.posix.authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ lookup('file', '/tmp/{{ item.name }}.pub') }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Check if podman is already configured
+      containers.podman.podman_login_info:
+        registry: registry.redhat.io
+      register: podman_status
+      loop: "{{ lab_seats }}"
+    - name: Ensure every user has podman properly configured
+      containers.podman.podman_login:
+        username: "{{ rhn_user }}"
+        password: "{{ rhn_password }}"
+        registry: registry.redhat.io
+      become: True
+      become_user: "{{ item.item.name }}"
+      when: not item.login.logged_in
+      loop: "{{ podman_status.results }}"
+    - name: Ensure every user has the ansible-navigator.yml config file
+      ansible.builtin.copy:
+        src: ansible-navigator.yml
+        dest: "/home/{{ item.name }}/.ansible-navigator.yml"
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0644"
+      loop: "{{ lab_seats }}"
+    - name: Ensure every user has the inventory file
+      ansible.builtin.template:
+        src: hosts
+        dest: "/home/{{ item.name }}/hosts"
+        owner: "{{ item.name }}"
+        group: "{{ item.name }}"
+        mode: "0644"
+      loop: "{{ lab_seats }}"
+
+- name: Ensure AAP is properly configured
+  hosts: localhost
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure every student has an org
+      awx.awx.organization:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has a user
+      awx.awx.user:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        username: "{{ item.name }}"
+        password: "{{ item.password }}"
+        organization: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student is admin of their organization
+      awx.awx.role:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        user: "{{ item.name }}"
+        organization: "{{ item.name }}"
+        role: admin
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has a credential configured
+      awx.awx.credential:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }} Credential"
+        credential_type: Machine
+        organization: "{{ item.name }}"
+        inputs:
+          ssh_key_data: "{{ lookup('file', '/tmp/{{ item.name }}') }}"
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has an inventory
+      awx.awx.inventory:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }} Inventory"
+        organization: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has the controller configured
+      awx.awx.host:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: controller
+        inventory: "{{ item.name }} Inventory"
+        enabled: True
+        variables:
+          ansible_host: "{{ aap_controller }}"
+          ansible_user: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has their lab configured
+      awx.awx.host:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: node
+        inventory: "{{ item.name }} Inventory"
+        enabled: True
+        variables:
+          ansible_host: "{{ item.ip }}"
+          ansible_user: "{{ item.name }}"
+        state: present
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has their control group configured
+      awx.awx.group:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: control
+        inventory: "{{ item.name }} Inventory"
+        hosts:
+          - controller
+        state: present
+        preserve_existing_hosts: True
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student has their web group configured
+      awx.awx.group:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: web
+        inventory: "{{ item.name }} Inventory"
+        hosts:
+          - node
+        state: present
+        preserve_existing_hosts: True
+      loop: "{{ lab_seats }}"
+
+- name: Ensure students machines are properly configured
+  hosts: lab-seats
+  remote_user: root
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure the machine is registered in RHN
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhn_user }}"
+        password: "{{ rhn_password }}"
+    - name: Ensure users in group wheel can sudo without password
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: ^%wheel
+        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+        validate: /usr/sbin/visudo -cf %s
+    - name: Ensure every student has the user in their lab machine
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        password: "{{ item.password }}"
+        groups: wheel
+        generate_ssh_key: True
+        state: present
+      when: item.ip == ansible_default_ipv4.address
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student account on controller can ssh to lab machine
+      ansible.posix.authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ lookup('file', '/tmp/{{ item.name }}.pub') }}"
+        state: present
+      when: item.ip == ansible_default_ipv4.address
+      loop: "{{ lab_seats }}"

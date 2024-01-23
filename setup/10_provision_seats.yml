@@ -1,0 +1,5 @@
+---
+- import_playbook: 11_create_vms.yml
+- import_playbook: 12_configure_controller.yml
+- import_playbook: 13_configure_aap.yml
+- import_playbook: 14_configure_vms.yml

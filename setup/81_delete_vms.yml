@@ -1,0 +1,14 @@
+---
+- name: Server provisioning
+  hosts: localhost
+  gather_facts: false
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: delete LPARs
+      include_role:
+        name: powervc_vm_delete
+      vars:
+        vm_name: "{{ lab_id }}_{{ item.name }}"
+        vm_ip: "{{ item.ip }}"
+      loop: "{{ lab_seats }}"

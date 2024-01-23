@@ -76,7 +76,7 @@
     timeout: 300
   register: new_lpar
   when:
-    - os_serverlist.servers is not defined
+    - vm_create_name not in os_serverlist.servers | map(attribute="name") | list
 
 - name: Print Info on created LPAR
   ansible.builtin.debug:

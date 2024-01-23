@@ -1,0 +1,41 @@
+---
+- name: Ensure students machines are properly configured
+  hosts: lab-seats
+  remote_user: root
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure the machine is registered in RHN
+      community.general.redhat_subscription:
+        state: present
+        username: "{{ rhn_user }}"
+        password: "{{ rhn_password }}"
+    - name: Ensure users in group wheel can sudo without password
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers
+        state: present
+        regexp: ^%wheel
+        line: '%wheel ALL=(ALL) NOPASSWD: ALL'
+        validate: /usr/sbin/visudo -cf %s
+    - name: Ensure every student has the user in their lab machine
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        password: "{{ item.password | password_hash('sha512') }}"
+        groups: wheel
+        state: present
+      when: item.ip == ansible_default_ipv4.address
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student account on controller can ssh to lab machine as root
+      ansible.posix.authorized_key:
+        user: root
+        key: "{{ lookup('file', '/tmp/{{ item.name }}.pub') }}"
+        state: present
+      when: item.ip == ansible_default_ipv4.address
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student account on controller can ssh to lab machine as user
+      ansible.posix.authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ lookup('file', '/tmp/{{ item.name }}.pub') }}"
+        state: present
+      when: item.ip == ansible_default_ipv4.address
+      loop: "{{ lab_seats }}"

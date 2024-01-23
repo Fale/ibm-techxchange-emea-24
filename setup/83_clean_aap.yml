@@ -1,0 +1,24 @@
+---
+- name: Clean AAP
+  hosts: localhost
+  vars_files:
+    - ../vars.yml
+  tasks:
+    - name: Ensure student AAP organization is not present
+      awx.awx.organization:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ lab_seats }}"
+    - name: Ensure every student user is not present
+      awx.awx.user:
+        controller_host: "{{ aap_controller }}"
+        controller_username: "{{ aap_username }}"
+        controller_password: "{{ aap_password }}"
+        validate_certs: False
+        username: "{{ item.name }}"
+        state: absent
+      loop: "{{ lab_seats }}"
